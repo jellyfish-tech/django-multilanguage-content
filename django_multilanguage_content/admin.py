@@ -1,7 +1,6 @@
 import typing
-
-from .logic import translation_models_list, langs
 from itertools import chain
+from .logic import langs, translation_models_list
 
 
 def setup_inlines(*args):

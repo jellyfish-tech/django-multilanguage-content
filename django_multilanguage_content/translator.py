@@ -1,5 +1,6 @@
-from googletrans import Translator
 import typing
+
+from googletrans import Translator
 
 translator = Translator(service_urls=['translate.googleapis.com'])
 

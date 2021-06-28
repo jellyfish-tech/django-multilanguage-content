@@ -1,6 +1,5 @@
-from rest_framework.serializers import ModelSerializer
-from rest_framework.viewsets import ModelViewSet
 from collections import OrderedDict
+from rest_framework.serializers import ModelSerializer
 from .logic import langs
 
 
@@ -30,7 +29,7 @@ def translated_model_serializers_fabric(base_model, languages, translations_fiel
 
 class TranslationModelSerializer(ModelSerializer):
     def get_fields(self):
-        base_serializer_fields = super(TranslationModelSerializer, self).get_fields()
+        base_serializer_fields = super().get_fields()
         # get serializing languages
         translations = getattr(self.Meta, 'translations', langs)
         # get serializing fields for translated models
@@ -47,8 +46,3 @@ class TranslationModelSerializer(ModelSerializer):
         base_serializer_fields = dict(base_serializer_fields)
         base_serializer_fields.update(new_fields)
         return OrderedDict(base_serializer_fields)
-
-
-
-class TranslationViewSet(ModelViewSet):
-    pass

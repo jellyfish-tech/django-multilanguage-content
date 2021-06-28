@@ -1,8 +1,9 @@
 django-translating-package
 ==========================
 
-1) Install from requirements
-2) Start install_translator.sh
+
+1) python setup.py install
+2) Start django_multilanguage_content/install_translator.sh
 
 ### Usage
 

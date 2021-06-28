@@ -1,12 +1,11 @@
+import typing
+from operator import attrgetter
+from types import MethodType
 from django.conf import settings
-from django.db.models import Model, OneToOneField, CASCADE, Field, ForeignKey
+from django.db.models import CASCADE, Field, Model, OneToOneField
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from types import MethodType
-from operator import attrgetter
 from .translator import translate
-import typing
-
 
 langs = [lang.lower() for lang in settings.TRANSLATING_LANGS]
 translation_models_list = []
