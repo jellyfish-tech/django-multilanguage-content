@@ -1,9 +1,12 @@
 from collections import OrderedDict
 from rest_framework.serializers import ModelSerializer
-from .logic import langs
+from .logic import global_langs
 
 
-def translated_model_serializers_fabric(base_model, languages, translations_fields, translations_connect_exclude):
+def translated_model_serializers_fabric(base_model, languages, translations_fields,
+                                        translations_connect_exclude,
+                                        is_read_only=True,
+                                        return_serializer_class=False):
     new_fields = {}
     base_model_name = base_model.get_base_model_name()
     for lang in languages:
@@ -23,7 +26,9 @@ def translated_model_serializers_fabric(base_model, languages, translations_fiel
             (ModelSerializer,),
             {'Meta': type('Meta', (object,), new_serializer_meta_dict)}
         )
-        new_fields[connected_model_name] = new_serializer(read_only=True)
+        if return_serializer_class:
+            return new_serializer
+        new_fields[connected_model_name] = new_serializer(read_only=is_read_only)
     return new_fields
 
 
@@ -31,7 +36,7 @@ class TranslationModelSerializer(ModelSerializer):
     def get_fields(self):
         base_serializer_fields = super().get_fields()
         # get serializing languages
-        translations = getattr(self.Meta, 'translations', langs)
+        translations = getattr(self.Meta, 'translations', global_langs)
         # get serializing fields for translated models
         translations_fields = getattr(self.Meta, 'translations_fields', '__all__')
         translations_connect_exclude = getattr(self.Meta, 'translations_connect_exclude', True)

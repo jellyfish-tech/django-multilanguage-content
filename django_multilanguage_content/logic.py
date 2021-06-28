@@ -7,7 +7,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .translator import translate
 
-langs = [lang.lower() for lang in settings.TRANSLATING_LANGS]
+global_langs = tuple(lang.lower() for lang in settings.TRANSLATING_LANGS)
 translation_models_list = []
 
 new_created_models = {}
@@ -52,7 +52,7 @@ def to_translation(model: Model) -> typing.Type[Model]:
 
     def get_all_connected_models(cls):
         all_connected_models = {}
-        for lang in langs:
+        for lang in global_langs:
             try:
                 connected_model = cls.get_connected_translated_model_class(lang)
                 all_connected_models[connected_model._meta.model_name] = connected_model
@@ -69,7 +69,7 @@ def to_translation(model: Model) -> typing.Type[Model]:
 
     translation_models_list.append(model)  # adding models to translation to list
     base_model_name = model.get_base_model_name()
-    for lang in langs:
+    for lang in global_langs:
         translate_model_name = model.get_translate_model_name(lang)
         # recreating translating model with the same fields except primary key
         base_fields = {field.name: field for field in model.get_base_model_fields() if field.primary_key is not True}
@@ -153,17 +153,18 @@ def register():
     @receiver(post_save)
     @__set_util_funcs()
     def translate_to_connected_tables(sender, instance, update_fields, **kwargs):
-        if sender in translation_models_list:
-            fields, pk = instance.get_fields_and_pk()
-            # get values from base model for translation
-            object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
-            obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
-            base_model_name = instance.get_base_model_name()
-            for lang in langs:
-                # TODO too slow. threading mb
-                translated = translate(obj_vals, lang)
-                data = {
-                    field: value.text for field, value in zip(obj_keys, translated)
-                }
-                data[f'{base_model_name}_ptr'] = instance
-                instance.translate_connected(lang, data)
+        if kwargs.get('created', False):
+            if sender in translation_models_list:
+                fields, pk = instance.get_fields_and_pk()
+                # get values from base model for translation
+                object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
+                obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
+                base_model_name = instance.get_base_model_name()
+                for lang in global_langs:
+                    # TODO too slow. threading mb
+                    translated = translate(obj_vals, lang)
+                    data = {
+                        field: value.text for field, value in zip(obj_keys, translated)
+                    }
+                    data[f'{base_model_name}_ptr'] = instance
+                    instance.translate_connected(lang, data)
