@@ -1,19 +1,22 @@
-import typing
+from typing import Type, Union, Tuple, List, NoReturn, Dict
 from operator import attrgetter
 from types import MethodType
 from django.conf import settings
 from django.db.models import CASCADE, Field, Model, OneToOneField
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .translator import translate
+from .translator import main_translator
 
 global_langs = tuple(lang.lower() for lang in settings.TRANSLATING_LANGS)
 translation_models_list = []
 
+# TODO consider how to save it
 new_created_models_properties = {}
 
 
-def __cleanify_fields(fields_to_stay: tuple, model: typing.Type[Model]) -> dict:
+def __cleanify_fields(fields_to_stay: tuple, model: Type[Model]) -> Dict[str, Type[Field]]:
+    """Method check fields to be translated, make list of needed fields"""
+
     base_model_name = model.get_base_model_name()
     cleaned_base_fields = {}
 
@@ -28,60 +31,61 @@ def __cleanify_fields(fields_to_stay: tuple, model: typing.Type[Model]) -> dict:
     return cleaned_base_fields
 
 
-def __follow_langs__clean_fields(model: typing.Type[Model],
-                                 langs_to_translate: typing.Union[list, tuple],
-                                 fields_to_stay: tuple):
+def __follow_langs__create_models(model: Type[Model],
+                                  langs_to_translate: Union[list, tuple],
+                                  fields_to_stay: tuple) -> NoReturn:
+    """Method actually creates new connected models"""
+
     for lang in langs_to_translate:
         translate_model_name = model.get_translate_model_name(lang)
         cleaned_fields = __cleanify_fields(fields_to_stay, model)
         translate_dict = {'__module__': model.__module__, **cleaned_fields}
+        # creating happens here. Magic type() :)
         type(translate_model_name, (Model,), translate_dict)
 
 
-def to_translation(*field_names, only_langs=None):
-    def inner(model: Model) -> typing.Type[Model]:
-        """
-        Decorator, using for mark the model as translatable. Also creating connected to this model, models according to
-         languages for translation
-        :param model:
-        :return: model
-        """
+def to_translation(*field_names: str, only_langs=None):
+    """Decorator to mark model as translatable"""
+    '''
+    *field_names - "positional" field names
+    FEAT:
+        only_langs - list or tuple langs to be used for translation only
+    '''
+    def inner(model: Model) -> Type[Model]:
 
-        def get_base_model_name(cls: typing.Type[Model]) -> str:
+        def get_base_model_name(cls: Type[Model]) -> str:
             """ Class method
              :return str - model name
              """
             return cls._meta.model_name
 
-        def get_base_model_fields(cls: typing.Type[Model]) -> typing.List[typing.Type[Field]]:
+        def get_base_model_fields(cls: Type[Model]) -> List[Type[Field]]:
             """ Class method
              :return list - list of model fields
              """
             return list(cls._meta.fields)
 
-        def get_translate_model_name(cls: typing.Type[Model], lang: str) -> str:
+        def get_translate_model_name(cls: Type[Model], lang: str) -> str:
             """ Class method
-            :param lang - translated language name
              :return str - translated model name
              """
             return f'{cls.get_base_model_name()}_{lang}'
 
-        def get_connected_translated_model_class(cls: typing.Type[Model], lang: str) -> typing.Type[Model]:
+        def get_connected_translated_model_class(cls: Type[Model], lang: str) -> Type[Model]:
             """
-            Class method. return connected translated models according to chosen lang
-            :param cls:
-            :param lang:
-            :return: connected model
+            Class method. Returns connected translated model class according to chosen lang
+            :return: connected model class
             """
             translated_model_getter = attrgetter(f'{cls.get_translate_model_name(lang)}.related.related_model')
             return translated_model_getter(cls)
 
-        def get_all_connected_models(cls):
+        def get_all_connected_models(cls: Type[Model]) -> Dict[str, Type[Model]]:
+            """Class method. Return dict of all connected models {name: model_class}"""
             all_connected_models = {}
             for lang in global_langs:
                 try:
                     connected_model = cls.get_connected_translated_model_class(lang)
-                    all_connected_models[connected_model._meta.model_name] = connected_model
+                    all_connected_models[connected_model.get_base_model_name()] = connected_model
                 except AttributeError:
                     continue
             return all_connected_models
@@ -103,7 +107,7 @@ def to_translation(*field_names, only_langs=None):
                                      f' is not in global languages list')
             followed_langs = only_langs
         fields_to_stay = (*field_names,)
-        __follow_langs__clean_fields(model, followed_langs, fields_to_stay)
+        __follow_langs__create_models(model, followed_langs, fields_to_stay)
 
         new_created_models_properties[model.get_base_model_name()] = fields_to_stay
 
@@ -115,7 +119,7 @@ def __set_util_funcs():
     """Private decorator. Adds additional functionality to model instance """
     def decor(func):
         def wrapper(sender, instance, update_fields, **kwargs):
-            """ Adds instance level functions """
+            """ Adds instance methods """
 
             if isinstance(instance, tuple(translation_models_list)):
                 model = instance
@@ -147,14 +151,20 @@ def __set_util_funcs():
                         setattr(this_lang_connected_model, key, data[key])
                     this_lang_connected_model.save()
 
-                def get_fields_and_pk(self) -> typing.Tuple[typing.List[typing.Type[Field]], typing.Type[Field]]:
+                def get_fields_and_pk(self) -> Tuple[List[Type[Field]], Type[Field]]:
                     """Instance level method"""
                     '''
                     :return tuple[instance fields list, instance pk field]
                     '''
-                    fields = self.get_base_model_fields()
+                    fields = self.get_base_model_fields()  # base fields
+                    # to stay fields
+                    fields_to_stay = new_created_models_properties[sender.get_base_model_name()]
+
                     pk_field = list(filter(lambda x: x.primary_key is True, fields))[0]
                     fields.remove(pk_field)
+                    # if fields to stay list is empty - all by default
+                    if len(fields_to_stay):
+                        fields = filter(lambda x: x.name in fields_to_stay, fields)
                     return fields, pk_field
 
                 def get_connected_translated_model_instance(self, lang: str):
@@ -171,7 +181,7 @@ def __set_util_funcs():
                         MethodType(get_connected_translated_model_instance, model)
                         )
 
-            func(sender, instance, update_fields, **kwargs)
+            func(sender, instance, **kwargs)
         return wrapper
     return decor
 
@@ -179,21 +189,22 @@ def __set_util_funcs():
 def register():
     @receiver(post_save, weak=False)
     @__set_util_funcs()
-    def translate_to_connected_tables(sender, instance, update_fields, **kwargs):
+    def translate_to_connected_tables(sender, instance, **kwargs):
         if kwargs.get('created', False):
             if sender in translation_models_list:
-                fields_to_stay = new_created_models_properties[sender.get_base_model_name()]
+                # already filtered fields
                 fields, pk = instance.get_fields_and_pk()
                 # get values from base model for translation
-                fields = filter(lambda x: x.name in fields_to_stay, fields)
                 object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
                 obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
                 base_model_name = instance.get_base_model_name()
+
                 for lang in global_langs:
                     # TODO too slow. threading mb
-                    translated = translate(obj_vals, lang)
+                    translated = main_translator(obj_vals, lang)
                     data = {
-                        field: value.text for field, value in zip(obj_keys, translated)
+                        field: value for field, value in zip(obj_keys, translated)
                     }
                     data[f'{base_model_name}_ptr'] = instance
                     instance.translate_connected(lang, data)
+
