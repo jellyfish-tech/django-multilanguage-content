@@ -1,1 +1,4 @@
 __pycache__/
+/examples/db.sqlite3
+/dist
+/django_multilanguage_content.egg-info
