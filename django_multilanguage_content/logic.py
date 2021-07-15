@@ -13,74 +13,94 @@ translation_models_list = []
 new_created_models = {}
 
 
-def to_translation(model: Model) -> typing.Type[Model]:
-    """
-    Decorator, using for mark the model as translatable. Also creating connected to this model, models according to
-     languages for translation
-    :param model:
-    :return: model
-    """
-
-    def get_base_model_name(cls: typing.Type[Model]) -> str:
-        """ Class method
-         :return str - model name
-         """
-        return cls._meta.model_name
-
-    def get_base_model_fields(cls: typing.Type[Model]) -> typing.List[typing.Type[Field]]:
-        """ Class method
-         :return list - list of model fields
-         """
-        return list(cls._meta.fields)
-
-    def get_translate_model_name(cls: typing.Type[Model], lang: str) -> str:
-        """ Class method
-        :param lang - translated language name
-         :return str - translated model name
-         """
-        return f'{cls.get_base_model_name()}_{lang}'
-
-    def get_connected_translated_model_class(cls: typing.Type[Model], lang: str) -> typing.Type[Model]:
-        """
-        Class method. return connected translated models according to chosen lang
-        :param cls:
-        :param lang:
-        :return: connected model
-        """
-        translated_model_getter = attrgetter(f'{cls.get_translate_model_name(lang)}.related.related_model')
-        return translated_model_getter(cls)
-
-    def get_all_connected_models(cls):
-        all_connected_models = {}
-        for lang in global_langs:
-            try:
-                connected_model = cls.get_connected_translated_model_class(lang)
-                all_connected_models[connected_model._meta.model_name] = connected_model
-            except AttributeError:
-                continue
-        return all_connected_models
-
-    # registration new class methods
-    setattr(model, 'get_base_model_name', MethodType(get_base_model_name, model))
-    setattr(model, 'get_base_model_fields', MethodType(get_base_model_fields, model))
-    setattr(model, 'get_translate_model_name', MethodType(get_translate_model_name, model))
-    setattr(model, 'get_connected_translated_model_class', MethodType(get_connected_translated_model_class, model))
-    setattr(model, 'get_all_connected_models', MethodType(get_all_connected_models, model))
-
-    translation_models_list.append(model)  # adding models to translation to list
+def __cleanify_fields(fields_to_stay: tuple, model: typing.Type[Model]) -> dict:
     base_model_name = model.get_base_model_name()
-    for lang in global_langs:
-        translate_model_name = model.get_translate_model_name(lang)
-        # recreating translating model with the same fields except primary key
-        base_fields = {field.name: field for field in model.get_base_model_fields() if field.primary_key is not True}
-        # adding translating model relation to base model
-        base_fields[f'{base_model_name}_ptr'] = OneToOneField(model, on_delete=CASCADE)
-        # simulating module attribute in translating model, and adding fields
-        translate_dict = {'__module__': model.__module__, **base_fields}
-        # creating translating model in memory. it saves as relation into base model
-        saving_new_model = {translate_model_name: type(translate_model_name, (Model,), translate_dict)}
+    cleaned_base_fields = {}
+    for field in model.get_base_model_fields():
+        if field.primary_key is not True and field.name in fields_to_stay:
+            cleaned_base_fields[field.name] = field
+    cleaned_base_fields[f'{base_model_name}_ptr'] = OneToOneField(model, on_delete=CASCADE)
+    return cleaned_base_fields
 
-    return model
+
+def __follow_langs__clean_fields(model: typing.Type[Model],
+                                 langs_to_translate: typing.Union[list, tuple],
+                                 fields_to_stay: tuple):
+    for lang in langs_to_translate:
+        translate_model_name = model.get_translate_model_name(lang)
+        cleaned_fields = __cleanify_fields(fields_to_stay, model)
+        translate_dict = {'__module__': model.__module__, **cleaned_fields}
+        type(translate_model_name, (Model,), translate_dict)
+
+
+def to_translation(*field_names, only_langs=None):
+    def inner(model: Model) -> typing.Type[Model]:
+        """
+        Decorator, using for mark the model as translatable. Also creating connected to this model, models according to
+         languages for translation
+        :param model:
+        :return: model
+        """
+
+        def get_base_model_name(cls: typing.Type[Model]) -> str:
+            """ Class method
+             :return str - model name
+             """
+            return cls._meta.model_name
+
+        def get_base_model_fields(cls: typing.Type[Model]) -> typing.List[typing.Type[Field]]:
+            """ Class method
+             :return list - list of model fields
+             """
+            return list(cls._meta.fields)
+
+        def get_translate_model_name(cls: typing.Type[Model], lang: str) -> str:
+            """ Class method
+            :param lang - translated language name
+             :return str - translated model name
+             """
+            return f'{cls.get_base_model_name()}_{lang}'
+
+        def get_connected_translated_model_class(cls: typing.Type[Model], lang: str) -> typing.Type[Model]:
+            """
+            Class method. return connected translated models according to chosen lang
+            :param cls:
+            :param lang:
+            :return: connected model
+            """
+            translated_model_getter = attrgetter(f'{cls.get_translate_model_name(lang)}.related.related_model')
+            return translated_model_getter(cls)
+
+        def get_all_connected_models(cls):
+            all_connected_models = {}
+            for lang in global_langs:
+                try:
+                    connected_model = cls.get_connected_translated_model_class(lang)
+                    all_connected_models[connected_model._meta.model_name] = connected_model
+                except AttributeError:
+                    continue
+            return all_connected_models
+
+        # registration new class methods
+        setattr(model, 'get_base_model_name', MethodType(get_base_model_name, model))
+        setattr(model, 'get_base_model_fields', MethodType(get_base_model_fields, model))
+        setattr(model, 'get_translate_model_name', MethodType(get_translate_model_name, model))
+        setattr(model, 'get_connected_translated_model_class', MethodType(get_connected_translated_model_class, model))
+        setattr(model, 'get_all_connected_models', MethodType(get_all_connected_models, model))
+
+        translation_models_list.append(model)  # adding models to translation to list
+
+        followed_langs = global_langs
+        if isinstance(only_langs, (list, tuple)):
+            for lang in only_langs:
+                if lang not in followed_langs:
+                    raise ValueError(f'Language {lang}, to be followed by {model.get_base_model_name()} model,'
+                                     f' is not in global languages list')
+            followed_langs = only_langs
+        __follow_langs__clean_fields(model, followed_langs, (*field_names,))
+
+        return model
+    return inner
 
 
 def __set_util_funcs():
@@ -149,8 +169,7 @@ def __set_util_funcs():
 
 
 def register():
-
-    @receiver(post_save)
+    @receiver(post_save, weak=False)
     @__set_util_funcs()
     def translate_to_connected_tables(sender, instance, update_fields, **kwargs):
         if kwargs.get('created', False):

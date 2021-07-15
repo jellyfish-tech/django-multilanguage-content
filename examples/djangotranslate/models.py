@@ -8,7 +8,7 @@ class Diff(models.Model):
     status = models.CharField(max_length=30)
 
 
-@to_translation
+@to_translation('name', 'status')
 class Simple(models.Model):
     name = models.CharField(max_length=20)
     age = models.IntegerField()
