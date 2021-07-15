@@ -10,13 +10,18 @@ from .translator import translate
 global_langs = tuple(lang.lower() for lang in settings.TRANSLATING_LANGS)
 translation_models_list = []
 
-new_created_models = {}
+new_created_models_properties = {}
 
 
 def __cleanify_fields(fields_to_stay: tuple, model: typing.Type[Model]) -> dict:
     base_model_name = model.get_base_model_name()
     cleaned_base_fields = {}
-    for field in model.get_base_model_fields():
+
+    models_fields = model.get_base_model_fields()
+    if not all(stay_field in list(map(lambda x: x.name, models_fields)) for stay_field in fields_to_stay):
+        raise ValueError(f'{base_model_name} has incompatible field name to translation')
+
+    for field in models_fields:
         if field.primary_key is not True and field.name in fields_to_stay:
             cleaned_base_fields[field.name] = field
     cleaned_base_fields[f'{base_model_name}_ptr'] = OneToOneField(model, on_delete=CASCADE)
@@ -97,7 +102,10 @@ def to_translation(*field_names, only_langs=None):
                     raise ValueError(f'Language {lang}, to be followed by {model.get_base_model_name()} model,'
                                      f' is not in global languages list')
             followed_langs = only_langs
-        __follow_langs__clean_fields(model, followed_langs, (*field_names,))
+        fields_to_stay = (*field_names,)
+        __follow_langs__clean_fields(model, followed_langs, fields_to_stay)
+
+        new_created_models_properties[model.get_base_model_name()] = fields_to_stay
 
         return model
     return inner
@@ -174,8 +182,10 @@ def register():
     def translate_to_connected_tables(sender, instance, update_fields, **kwargs):
         if kwargs.get('created', False):
             if sender in translation_models_list:
+                fields_to_stay = new_created_models_properties[sender.get_base_model_name()]
                 fields, pk = instance.get_fields_and_pk()
                 # get values from base model for translation
+                fields = filter(lambda x: x.name in fields_to_stay, fields)
                 object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
                 obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
                 base_model_name = instance.get_base_model_name()
