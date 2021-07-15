@@ -186,25 +186,31 @@ def __set_util_funcs():
     return decor
 
 
+def preparing_content(instance):
+    # already filtered fields
+    fields, pk = instance.get_fields_and_pk()
+    # get values from base model for translation
+    object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
+    obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
+    # base_model_name = instance.get_base_model_name()
+    return obj_keys, obj_vals
+
+
+def do_translate(instance, lang, field_names, field_values):
+    translated = main_translator(field_values, lang)
+    data = dict(zip(field_names, translated))
+    data[f'{instance.get_base_model_name()}_ptr'] = instance
+    instance.translate_connected(lang, data)
+
+
 def register():
     @receiver(post_save, weak=False)
     @__set_util_funcs()
     def translate_to_connected_tables(sender, instance, **kwargs):
         if kwargs.get('created', False):
             if sender in translation_models_list:
-                # already filtered fields
-                fields, pk = instance.get_fields_and_pk()
-                # get values from base model for translation
-                object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
-                obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
-                base_model_name = instance.get_base_model_name()
-
+                field_names, field_values = preparing_content(instance)
                 for lang in global_langs:
-                    # TODO too slow. threading mb
-                    translated = main_translator(obj_vals, lang)
-                    data = {
-                        field: value for field, value in zip(obj_keys, translated)
-                    }
-                    data[f'{base_model_name}_ptr'] = instance
-                    instance.translate_connected(lang, data)
+                    # # TODO too slow. threading mb
+                    do_translate(instance, lang, field_names, field_values)
 
