@@ -3,13 +3,13 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
-from .logic import global_langs
 from .serializers import translated_model_serializers_fabric
 from django.core.exceptions import ObjectDoesNotExist
+from .store import models_store
 
 
 def lang_param_in_global_lang(lang):
-    return lang in global_langs
+    return lang in models_store.global_langs
 
 
 class TranslationViewSet(ModelViewSet):

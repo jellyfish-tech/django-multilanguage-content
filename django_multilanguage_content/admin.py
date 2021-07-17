@@ -1,6 +1,6 @@
 import typing
 from itertools import chain
-from .logic import global_langs, translation_models_list
+from .store import models_store
 
 
 def setup_inlines(*args):
@@ -21,7 +21,8 @@ class TranslateAdminInlines:
                  include_langs=(),
                  exclude_langs=(),
                  **kwargs):
-        assert base_translating_model in translation_models_list, 'This model is not registered as translatable'
+        assert base_translating_model in models_store.translation_models_list, \
+            'This model is not registered as translatable'
         self.base_model = base_translating_model
         self.inliner = inliner_type
         self.kwargs = kwargs
@@ -29,7 +30,7 @@ class TranslateAdminInlines:
             self.kwargs['extra'] = 0
         self.include_langs = [include_lang.lower() for include_lang in include_langs]
         self.exclude_langs = [exclude_lang.lower() for exclude_lang in exclude_langs]
-        self.langs = global_langs
+        self.langs = models_store.global_langs
 
         self._prepare_langs()
 

@@ -1,17 +1,11 @@
 from typing import Type, Union, Tuple, List, NoReturn, Dict
 from operator import attrgetter
 from types import MethodType
-from django.conf import settings
 from django.db.models import CASCADE, Field, Model, OneToOneField
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from .translator import main_translator
-
-global_langs = tuple(lang.lower() for lang in settings.TRANSLATING_LANGS)
-translation_models_list = []
-
-# TODO consider how to save it
-new_created_models_properties = {}
+from .store import models_store
 
 
 def __cleanify_fields(fields_to_stay: tuple, model: Type[Model]) -> Dict[str, Type[Field]]:
@@ -82,7 +76,7 @@ def to_translation(*field_names: str, only_langs=None):
         def get_all_connected_models(cls: Type[Model]) -> Dict[str, Type[Model]]:
             """Class method. Return dict of all connected models {name: model_class}"""
             all_connected_models = {}
-            for lang in global_langs:
+            for lang in models_store.global_langs:
                 try:
                     connected_model = cls.get_connected_translated_model_class(lang)
                     all_connected_models[connected_model.get_base_model_name()] = connected_model
@@ -97,9 +91,10 @@ def to_translation(*field_names: str, only_langs=None):
         setattr(model, 'get_connected_translated_model_class', MethodType(get_connected_translated_model_class, model))
         setattr(model, 'get_all_connected_models', MethodType(get_all_connected_models, model))
 
-        translation_models_list.append(model)  # adding models to translation to list
+        # translation_models_list.append(model)  # adding models to translation to list
+        models_store.translation_models_list = model
 
-        followed_langs = global_langs
+        followed_langs = models_store.global_langs
         if isinstance(only_langs, (list, tuple)):
             for lang in only_langs:
                 if lang not in followed_langs:
@@ -109,7 +104,8 @@ def to_translation(*field_names: str, only_langs=None):
         fields_to_stay = (*field_names,)
         __follow_langs__create_models(model, followed_langs, fields_to_stay)
 
-        new_created_models_properties[model.get_base_model_name()] = fields_to_stay
+        # new_created_models_properties[model.get_base_model_name()] = fields_to_stay
+        models_store.new_created_models_properties = {model.get_base_model_name(): fields_to_stay}
 
         return model
     return inner
@@ -121,7 +117,8 @@ def __set_util_funcs():
         def wrapper(sender, instance, update_fields, **kwargs):
             """ Adds instance methods """
 
-            if isinstance(instance, tuple(translation_models_list)):
+            # if isinstance(instance, tuple(translation_models_list)):
+            if isinstance(instance, models_store.translation_models_list):
                 model = instance
 
                 def translate_connected(self, lang: str, data: dict):
@@ -158,7 +155,8 @@ def __set_util_funcs():
                     '''
                     fields = self.get_base_model_fields()  # base fields
                     # to stay fields
-                    fields_to_stay = new_created_models_properties[sender.get_base_model_name()]
+                    # fields_to_stay = new_created_models_properties[sender.get_base_model_name()]
+                    fields_to_stay = models_store.new_created_models_properties[sender.get_base_model_name()]
 
                     pk_field = list(filter(lambda x: x.primary_key is True, fields))[0]
                     fields.remove(pk_field)
@@ -187,16 +185,17 @@ def __set_util_funcs():
 
 
 def preparing_content(instance):
+    """Function to prepare content for translation"""
     # already filtered fields
     fields, pk = instance.get_fields_and_pk()
     # get values from base model for translation
     object_to_translate = {field.name: field.value_from_object(instance) for field in fields}
     obj_keys, obj_vals = list(zip(*object_to_translate.items()))  # unzip dict items | [tuple_keys, tuple_values]
-    # base_model_name = instance.get_base_model_name()
     return obj_keys, obj_vals
 
 
 def do_translate(instance, lang, field_names, field_values):
+    """Function that evaluate translation process"""
     translated = main_translator(field_values, lang)
     data = dict(zip(field_names, translated))
     data[f'{instance.get_base_model_name()}_ptr'] = instance
@@ -208,9 +207,8 @@ def register():
     @__set_util_funcs()
     def translate_to_connected_tables(sender, instance, **kwargs):
         if kwargs.get('created', False):
-            if sender in translation_models_list:
+            if sender in models_store.translation_models_list:
                 field_names, field_values = preparing_content(instance)
-                for lang in global_langs:
+                for lang in models_store.global_langs:
                     # # TODO too slow. threading mb
                     do_translate(instance, lang, field_names, field_values)
-

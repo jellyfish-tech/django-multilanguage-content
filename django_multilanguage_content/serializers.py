@@ -1,7 +1,7 @@
 from collections import OrderedDict
 from rest_framework.serializers import ModelSerializer
-from .logic import global_langs
-
+# from .logic import global_langs
+from .store import models_store
 
 def translated_model_serializers_fabric(base_model, languages, translations_fields,
                                         translations_connect_exclude,
@@ -36,7 +36,7 @@ class TranslationModelSerializer(ModelSerializer):
     def get_fields(self):
         base_serializer_fields = super().get_fields()
         # get serializing languages
-        translations = getattr(self.Meta, 'translations', global_langs)
+        translations = getattr(self.Meta, 'translations', models_store.global_langs)
         # get serializing fields for translated models
         translations_fields = getattr(self.Meta, 'translations_fields', '__all__')
         translations_connect_exclude = getattr(self.Meta, 'translations_connect_exclude', True)
