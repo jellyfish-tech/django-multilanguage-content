@@ -1,8 +1,9 @@
-from django.db.models import Model
 from dataclasses import dataclass, field
-from typing import Set, Type, Dict, List, Tuple
-from django.conf import settings
 from functools import cached_property
+from typing import Dict, List, Set, Tuple, Type
+
+from django.conf import settings
+from django.db.models import Model
 
 
 @dataclass
@@ -32,7 +33,7 @@ class TranslationModelsStore:
         intersection = allowed_keys & new_keys
         if not intersection == new_keys:
             raise ValueError(f'{new_keys - allowed_keys} keys are not allowed. '
-                             f'Models with such names had not been registered')
+                             f'Models with such names have not been registered')
         self.__new_created_models_properties.update(info)
 
     @cached_property

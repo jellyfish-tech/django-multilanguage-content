@@ -3,12 +3,12 @@ django-translating-package
 
 
 1) python setup.py install
-2) Start django_multilanguage_content/install_translator.sh
 
 ### Usage
 
 Settings
 
+    INSTALLED_APPS = [..., 'django_multilanguage_content']
     TRANSLATING_LANGS = [<langs>]
 
 Models
@@ -16,6 +16,8 @@ Models
     from django_translating_package import to_translation
 
     and decorate your model
+
+    decorator gets a strings, represent names of fields to translation
 
 App
 
@@ -53,3 +55,9 @@ For DRF
             translations_fields = '__all__' - default __all__ except fk connected model
             translations_connect_exclude = False - default True
 
+CLI
+
+    To translate existed record in marked models, use django manager command
+
+    ./manage.py translate_existed  -- to translate all marked
+    add flag -a (--app) -- to specify application you'd like to translate

@@ -1,5 +1,6 @@
 import typing
 from itertools import chain
+
 from .store import models_store
 
 

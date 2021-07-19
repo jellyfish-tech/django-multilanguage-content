@@ -1,6 +1,9 @@
 from django.contrib import admin
+
+from django_multilanguage_content.admin import (TranslateAdminInlines,
+                                                setup_inlines)
+
 from .models import Simple
-from django_multilanguage_content.admin import TranslateAdminInlines, setup_inlines
 
 inlines = setup_inlines(
     TranslateAdminInlines(Simple,
