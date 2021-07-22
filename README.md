@@ -21,6 +21,8 @@ Models
 
 App
 
+    from django_translating_package import register
+
     Override ready method
 
         def ready(self):
