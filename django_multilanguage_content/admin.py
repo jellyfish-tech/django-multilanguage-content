@@ -40,7 +40,7 @@ class TranslateAdminInlines:
         if self.include_langs and self.exclude_langs:
             raise ValueError("Not possible include and exclude languages")
         elif self.include_langs:
-            self.langs = filter(lambda x: x in self.langs, self.include_langs)
+            self.langs = iter([lang for lang in self.langs if lang in self.include_langs])
         elif self.exclude_langs:
             self.langs = iter([lang for lang in self.langs if lang not in self.exclude_langs])
         else:
