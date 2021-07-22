@@ -1,6 +1,7 @@
-from .models import Simple
 from django_multilanguage_content.serializers import TranslationModelSerializer
 from django_multilanguage_content.views import TranslationViewSet
+
+from .models import Simple
 
 
 class SimpleSerializer(TranslationModelSerializer):

@@ -1,5 +1,6 @@
-from googletrans import Translator
 from deep_translator import GoogleTranslator
+from googletrans import Translator
+
 from .exceptions import ResponseError
 
 
